@@ -15,6 +15,7 @@ import joblib
 # from mworks.data import MWKFile
 
 from utils.mworksutils import MWK2Reader
+from utils.mworksutils import get_trial_indices
 
 import argparse
 import configparser
@@ -75,26 +76,6 @@ def get_events(filepath, names, time_range=[0, np.inf]):
     data_df = pd.DataFrame(data_dict)
     data_df = data_df.sort_values(by='time').reset_index(drop=True)
     return data_df
-
-def get_trial_indices(events, df = False, delay_sec= 1):
-    if df:
-        times = np.array([row.time for i, row in events.iterrows()])
-    else:
-        times = np.array([i.time for i in events])
-
-    diff_times = np.diff(times)
-    trials = []
-    mini_trial = [0]
-
-    for i, t in enumerate(diff_times):
-        if t < delay_sec*1e6:
-            mini_trial.append(i+1)
-        else:
-            trials.append(mini_trial)
-            mini_trial = [i+1]
-    trials.append(mini_trial)
-    print(i, len(trials))
-    return trials
 
 
 

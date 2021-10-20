@@ -2,6 +2,9 @@ from __future__ import division, print_function, unicode_literals
 import sqlite3
 import zlib
 
+import numpy as np
+import pandas as pd
+
 import msgpack
 
 try:
@@ -59,3 +62,26 @@ class MWK2Reader(object):
                         yield (code, time, self._unpacker.unpack())
                 except msgpack.OutOfData:
                     pass
+                
+                
+                
+def get_trial_indices(events, df = False, delay_sec= 1):
+    if df:
+        times = np.array([row.time for i, row in events.iterrows()])
+    else:
+        times = np.array([i.time for i in events])
+
+    diff_times = np.diff(times)
+    trials = []
+    mini_trial = [0]
+
+    for i, t in enumerate(diff_times):
+        if t < delay_sec*1e6:
+            mini_trial.append(i+1)
+        else:
+            trials.append(mini_trial)
+            mini_trial = [i+1]
+    trials.append(mini_trial)
+    print(i, len(trials))
+    return trials
+

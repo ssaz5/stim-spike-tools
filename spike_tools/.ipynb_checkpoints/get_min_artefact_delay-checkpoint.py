@@ -17,6 +17,8 @@ import msgpack
 
 from scipy.signal import find_peaks
 
+from utils.mworksutils import get_trial_indices
+
 try:
     buffer
 except NameError:
@@ -126,18 +128,18 @@ def main():
     
     if args.date == '':
         file_name = args.file_name
-        data_date = file_name.split('_')[-2]
+        date = file_name.split('_')[-2]
     else:
-        data_date = args.date
+        date = args.date
         print(os.path.join(rawDataPath,'intanraw'))
-        file_name = [i for i in os.listdir(os.path.join(rawDataPath,'intanraw')) if data_date in i and i != data_date][0]
+        file_name = [i for i in os.listdir(os.path.join(rawDataPath,'intanraw')) if date in i and i != date][0]
         
     
     directory_path = os.path.join(rawDataPath, "intanraw/", file_name)
 
     
     prefix = args.prefix
-    os.makedirs(rawDataPath+"intanraw/"+prefix+data_date, exist_ok = True)
+    os.makedirs(rawDataPath+"intanraw/"+prefix+date, exist_ok = True)
 
 
     samplingFrequency = 20000
@@ -161,8 +163,9 @@ def main():
     pulse_train = pulse_train[::-1]
     
 
+    ################ SAMP_ON DIGITAL LINE 2 #####################################
         
-    samp_filename = rawDataPath+"intanraw/"+prefix+data_date+'/samp_time_'+data_date+'.pkl'
+    samp_filename = rawDataPath+"intanraw/"+prefix+date+'/samp_time_'+date+'.pkl'
 
     if os.path.exists(samp_filename):
         samp_on = joblib.load(samp_filename)
@@ -178,8 +181,64 @@ def main():
         samp_on = samp_on + 1 # Previous line returns indexes of 0s seen before spikes, but we want indexes of first spikes
         joblib.dump(samp_on, samp_filename)
 
+        
+    ############### LOAD MWORKS DATA ################################    
+    data_file_name = os.path.join(rawDataPath, 'intanraw',date, 'all_data.pkl')
+    print(data_file_name)
+    if os.path.exists(data_file_name):
+        mworks_data = joblib.load(data_file_name)
+    else:
+        print('MWORKS RAW PKL DOESN\'T EXIST. Please run mwk_create.py')
+        return
+    # event_file.close()
+
+    
+    ################# Prepare current values to check for control ###########################
+    
+    current_events = mworks_data.loc[mworks_data['name'] == 'stim_current'].reset_index(drop=True)
+    id_events = mworks_data.loc[mworks_data['name'] == 'stim_id'].reset_index(drop=True)
+    current_times = np.array([row.time for i, row in current_events.iterrows()])
+    id_times = np.array([row.time for i, row in id_events.iterrows()])
+
+    current_trials = get_trial_indices(current_events, df=True, delay_sec=0.5)
+    id_trials = get_trial_indices(id_events, df=True, delay_sec = 0.5)
 
 
+    correct_id = []
+    correct_current = []
+
+    curr_idx = 0
+
+    while np.all(np.array(current_events.iloc[current_trials[curr_idx]].data) == 1):
+        curr_idx += 1
+
+    for i in range(len(id_trials)):
+        current_trial = current_trials[curr_idx]
+        id_trial = id_trials[i]
+
+        if '' in np.array(id_events.iloc[id_trial].data):
+            continue
+
+        if len(id_trial) > 8:
+            id_trial = id_trial[-8:]
+
+
+        for idx, j in enumerate(id_trial):
+            try:
+                correct_current.append(current_trial[idx])
+                correct_id.append(j)
+            except:
+                pass
+
+        if len(id_trial) > 1:
+            curr_idx += 1
+
+    samp_on_id = np.array(id_events.iloc[correct_id].data)[:len(samp_on)]
+
+    samp_on_current = np.array(current_events.iloc[correct_current].data)[:len(samp_on)]
+    
+    ###################################################################
+    
     channel_letters = np.array(['a', 'b', 'c', 'd', 'e', 'f'])
     channel_numbers = np.arange(32)
 
@@ -191,13 +250,13 @@ def main():
     missing_channels = []
 
     if args.get_median:
-        artefact_files = [os.path.join('artefact_delays_'+data_date+'_'+i+'.pkl') for i in all_channels]
+        artefact_files = [os.path.join('artefact_delays_'+date+'_'+i+'.pkl') for i in all_channels]
         artefact_times = np.zeros([len(artefact_files), len(samp_on)]) 
 
 
         for i, artefact_file in enumerate(artefact_files):
             try:
-                artefact_info = joblib.load(rawDataPath+"intanraw/"+os.path.join(prefix+data_date, artefact_file))
+                artefact_info = joblib.load(rawDataPath+"intanraw/"+os.path.join(prefix+date, artefact_file))
                 artefact_times[i,:] = artefact_info['artefact_delay']
 
             except:
@@ -209,7 +268,7 @@ def main():
 
         else:
 #             artefact_times =  np.nanmedian(artefact_times, axis=0) # + samp_on 
-            joblib.dump(artefact_times, os.path.join(rawDataPath+"intanraw/"+prefix+data_date, 'artefact_time_'+data_date+'.pkl'))
+            joblib.dump(artefact_times, os.path.join(rawDataPath+"intanraw/"+prefix+date, 'artefact_time_'+date+'.pkl'))
 
 
     else:
@@ -217,7 +276,7 @@ def main():
         channel_name = all_channels[args.channel_id]
         print(channel_name )
 
-        artefact_delay_filename = rawDataPath+"intanraw/"+prefix+data_date+'/artefact_delays_'+data_date+'_'+channel_name+'.pkl'
+        artefact_delay_filename = rawDataPath+"intanraw/"+prefix+date+'/artefact_delays_'+date+'_'+channel_name+'.pkl'
         
         if os.path.exists(artefact_delay_filename):
             return
@@ -266,19 +325,22 @@ def main():
 
 
             try:
-    #             artefact_time = np.min(peaks)
-                ########### SULE EDITS -- GET BEGINNING OF PULSE TRAIN #########################
-                if vthres < 100:
-                    print('This did not work!')
-                    raise Exception("Let's not!")
-                
-                temp[peaks] = 1
-                
-                sig_av = np.convolve(np.square (band_pass_sub_signal), pulse_train, 'valid')
-                art_start = np.argmax(sig_av) - art_width
+                if samp_on_current[i] > 0:
+        #             artefact_time = np.min(peaks)
+                    ########### SULE EDITS -- GET BEGINNING OF PULSE TRAIN #########################
+                    if vthres < 100:
+                        print('This did not work!')
+                        raise Exception("Let's not!")
 
-                 ########### SULE EDITS -- GET BEGINNING OF PULSE TRAIN #########################
+                    temp[peaks] = 1
 
+                    sig_av = np.convolve(np.square (band_pass_sub_signal), pulse_train, 'valid')
+                    art_start = np.argmax(sig_av) - art_width
+
+                     ########### SULE EDITS -- GET BEGINNING OF PULSE TRAIN #########################
+                else:
+                    art_start = 0
+                        
                 artefact_time =  art_start
                 artefact_on.append(artefact_time)
                 sub_samp_on.append(s)

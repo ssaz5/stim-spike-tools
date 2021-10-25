@@ -25,13 +25,14 @@ config.read(Path(__file__).parent / 'spike_config.ini')
 
 
 parser = argparse.ArgumentParser(description='Run Mworks Analysis.')
-parser.add_argument('mworks_file', metavar='N', type=str,
-    help='Mworks file Name: To be changed soon')
-parser.add_argument('photodiode_file', metavar='N', type=str,
-    help='Photodiode file Name: To be changed soon')
-parser.add_argument('samp_on_file', metavar='N', type=str,
-    help='sample on file Name: To be changed soon')
-parser.add_argument('remove_artefacts', type=int, default=0)
+parser.add_argument('mworks_file', type=str,
+    help='Mworks file Name: To be changed soon', nargs='?',default='')
+parser.add_argument('photodiode_file', type=str,
+    help='Photodiode file Name: To be changed soon', nargs='?',default='-')
+parser.add_argument('samp_on_file', type=str,
+    help='sample on file Name: To be changed soon', nargs='?',default='')
+parser.add_argument('--remove_artefacts', type=int, nargs='?',default=0)
+parser.add_argument('--session_num', type=int, nargs='?',default=0)
 parser.add_argument('--date', type=str)
 args = parser.parse_args()
 date = args.date
@@ -98,9 +99,38 @@ def get_events_mac(event_file, name):
 
 def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag = False, reverse_flag=False, skip_num=None):
     print(filename)
-    rawDataDir = '/'.join(sample_on_file.split('/')[:-2])
-    mworksprocDir = '/'.join(sample_on_file.split('/')[:-3] + ['mworksproc'])
+    
+    if args.date:
+        print('Date exists')
+        baseDir = os.path.join('/om/user/ssazaidi/braintree_data/projects/', config['Experiment Information']['name'], 'monkeys', config['Experiment Information']['monkey'])
+        mworksRawDir = os.path.join(baseDir, 'mworksraw')
+        intanRawDir = os.path.join(baseDir, 'intanraw')
+        rawDataDir = intanRawDir
+        mworksprocDir = os.path.join(baseDir, 'mworksproc')
+        intanRawDir = os.path.join(intanRawDir, [i for i in os.listdir(intanRawDir) if date in i][args.session_num])
 
+        filename = os.path.join(mworksRawDir,[i for i in os.listdir(mworksRawDir) if date in i][args.session_num])
+
+        photodiode_file = os.path.join(intanRawDir, 'board-ANALOG-IN-1.dat')
+        sample_on_file = os.path.join(intanRawDir, 'board-DIGITAL-IN-02.dat')
+
+    else:
+        print('date does not exist: ', args.date)
+        if filename == '':
+            print('Specify either filenames or the date')
+            return
+        rawDataDir = '/'.join(sample_on_file.split('/')[:-2])
+        mworksprocDir = '/'.join(sample_on_file.split('/')[:-3] + ['mworksproc'])
+
+    
+    print(rawDataDir)
+    print(filename)
+    print(photodiode_file)
+    print(sample_on_file)
+    print(args.remove_artefacts)
+    
+#     return
+    
     if (not os.path.exists(rawDataDir) )and artefact_diode_flag:
         print('Artefact times not available')
         return -1
@@ -112,9 +142,6 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
     # return  
     # Variables we'd like to fetch data for
     names = ['trial_start_line',
-             'stim_key',
-             'stim_id',
-             'stim_current',
              'correct_fixation',
              'stimulus_presented',
              'stim_on_time',
@@ -124,12 +151,16 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
              'fixation_window_size',
              'fixation_point_size_min']
     
+    if 'stimulation' in config['Experiment Information']['name']:
+        names = names+['stim_key', 'stim_id',  'stim_current',]
+    
     data_file_name = os.path.join(rawDataDir,date, 'all_data.pkl')
     
     if os.path.exists(data_file_name):
         data = joblib.load(data_file_name)
     else:
         data = get_events(filepath=filename, names=names)
+        os.makedirs(os.path.join(rawDataDir,date), exist_ok = True)
         joblib.dump(data, data_file_name)
     # event_file.close()
 
@@ -357,7 +388,8 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
         output['stim_id'] = np.array(id_events.iloc[correct_id].data)[:len(samp_on)][good_ones]
 
         output['stim_current'] = np.array(current_events.iloc[correct_current].data)[:len(samp_on)][good_ones]
-    
+    else:
+        good_ones = np.arange(len(samp_on))
         
     ###########################################################################
     # Save output

@@ -107,7 +107,7 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
         intanRawDir = os.path.join(baseDir, 'intanraw')
         rawDataDir = intanRawDir
         mworksprocDir = os.path.join(baseDir, 'mworksproc')
-        intanRawDir = os.path.join(intanRawDir, [i for i in os.listdir(intanRawDir) if date in i][args.session_num])
+        intanRawDir = os.path.join(intanRawDir, [i for i in os.listdir(intanRawDir) if date+'_' in i][args.session_num])
 
         filename = os.path.join(mworksRawDir,[i for i in os.listdir(mworksRawDir) if date in i][args.session_num])
 
@@ -394,7 +394,13 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
     ###########################################################################
     # Save output
     ###########################################################################
-    output['stimulus_presented'] = stimulus_presented_df.data.values[good_ones].tolist()
+    stimulus_presented = stimulus_presented_df.data.values[good_ones].tolist()
+    samp_on_id = output['stim_id']
+    samp_on_current = output['stim_current']
+    temp = np.unique(list(zip(stimulus_presented,samp_on_id,samp_on_current)), axis=0)
+    stim_num_key = dict(zip([tuple( i )for i in temp], np.arange(1,len(temp)+1)))
+    new_stim_presented = [stim_num_key[tuple(i)] for i in np.array(list(zip(stimulus_presented,samp_on_id,samp_on_current)))]
+    output['stimulus_presented'] = new_stim_presented
     output['fixation_correct'] = correct_fixation_df.data.values[good_ones].tolist()
     output['stimulus_order_in_trial'] = stimulus_presented_df.stimulus_order_in_trial.values[good_ones].tolist()
 #     output['eye_h_degrees'] = eye_h

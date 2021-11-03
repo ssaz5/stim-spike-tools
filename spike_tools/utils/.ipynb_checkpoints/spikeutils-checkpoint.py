@@ -76,6 +76,7 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
 
         if not os.path.isfile(os.path.join(proc_dir, d, 'spikeTime') + '/' + files[num][:-4] + '_spk.mat'):
             # Get amplifier channel data and apply 60 Hz notch filter
+            print('inside')
             v = read_amplifier(os.path.join(raw_dir, d, files[num]))  # In microvolts
             v = notch_filter(v, f_sampling=f_sampling, f_notch=60, bandwidth=10)
             
@@ -88,8 +89,8 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
                 artefact_times = np.nanmedian(artefact_times, axis=0).astype(int)
                 artefact_times = artefact_times[good_ones]
                 
-                v = remove_artefacts(v, artefact_times, f_sampling, f_low, f_high, art_time_usec=1500, v_thres=400, num_pulses=num_pulses, pulse_width_usec=pulse_period, apply_salpa=apply_salpa)
-            
+                v = remove_artefacts_mod(v, artefact_times, f_sampling, f_low, f_high, art_time_usec=1500, v_thres=400, num_pulses=num_pulses, pulse_width_usec=pulse_period, apply_salpa=apply_salpa)
+            print('Artefacts successfully removed')
             
 
             nrSegments = 10
@@ -674,7 +675,7 @@ def remove_artefacts(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_time_u
         
     return signal
 
-def remove_artefacts_mod(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_time_usec=1200, v_thres = 100, num_pulses = 10, pulse_width_usec = 4000, apply_salpa = False):
+def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_time_usec=1200, v_thres = 100, num_pulses = 10, pulse_width_usec = 4000, apply_salpa = False, samp_current=1):
     """
     Remove stimulation artefacts using absolute threshold (v_thres)
     Function removes signal of micro-second time window art_time_usec around each artefact and replaces it with linear interpolation of 
@@ -685,6 +686,13 @@ def remove_artefacts_mod(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_ti
         art_time_usec = np.array(art_time_usec)
     elif type(art_time_usec) == int:
         art_time_usec = np.ones_like(samp_on)*art_time_usec
+    else:
+        assert type(art_time_usec) == np.ndarray
+        
+    if type(samp_current) == list:
+        samp_current = np.array(art_time_usec)
+    elif type(samp_current) == int:
+        samp_current = np.ones_like(samp_on)*art_time_usec
     else:
         assert type(art_time_usec) == np.ndarray
         
@@ -700,10 +708,12 @@ def remove_artefacts_mod(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_ti
             S[i,j] = T[i+j]
 
     art_time_sec = art_time_usec[i]/1e6
-    art_len_pre = np.ceil(fs*300/1e6)
-    art_len_post = np.ceil(fs*art_time_sec)    
+    art_len_pre = np.ceil(fs*300/1e6).astype(int)
+    art_len_post = np.ceil(fs*art_time_sec).astype(int)    
         
     for i, s in enumerate(samp_on):
+        if i == 39:
+            print(samp_current[i])
         pre_ = 0
         post_ = int(pulse_width*num_pulses)+200
         
@@ -715,34 +725,59 @@ def remove_artefacts_mod(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_ti
         sub_signal = bandpass_filter(signal[s-pre_: s+post_], fs, flow,fhigh)
 
         peaks= np.array([])
-        
-        while not peaks.size:
-            peaks = find_peaks(np.abs(sub_signal[:100]), vthres)[0]
-            vthres = vthres*0.9
+        if samp_current[i]:
+            while not peaks.size:
+                peaks = find_peaks(np.abs(sub_signal[:100]), vthres)[0]
+                vthres = vthres*0.9
 
-           
-        try:
-            first_peak = np.min(peaks)
-        except:
-            print("Error on Artefact number: " , i, 'peaks', peaks, v_thres)
-            return
 
+            try:
+                first_peak = np.min(peaks)
+            except:
+                print("Error on Artefact number: " , i, 'peaks', peaks, v_thres)
+                return
+        else:
+            first_peak = 0
         ## Salpa Application
-        center = int((first_peak - art_len_pre) + art_len_post )
-        sub_signal = signal[s + center: s+post_]
-        
         if apply_salpa:
+            
+            center = int((first_peak - art_len_pre) + art_len_post )
+            
+            ### Pre stim signal ###
+            pre_pre_ = 3000
+            start_ = s-pre_pre_
+            end_ = s+center - art_len_post
+            sub_signal = signal[ start_: end_]
+            
+            
+            y_fit_complete = np.zeros_like(sub_signal)
+
+            W = np.array([np.convolve(sub_signal,np.power(np.arange(-N, N+1), i)[::-1], 'valid') for i in range(max_poly+1)])
+            a = np.linalg.inv(S)@W
+            y_fit_complete[N:-N] = a[0]
+
+            y_fit_complete[:N] = (a[:,0].T@np.array([np.power(np.arange(-N, N+1), i) for i in range(max_poly+1)]))[:N]
+
+
+            y_fit_complete[-N-1:] = (a[:,-1].T@np.array([np.power(np.arange(-N, N+1), i) for i in range(max_poly+1)]))[N:]
+
+            signal[start_: end_] = sub_signal - y_fit_complete
+
+            ### Post Stim signal ###
+            
+            sub_signal = signal[s + center: s+2000]
+            
             for i in range(num_pulses):
                 start_ = i*pulse_width
-#                 end_ = int((i+1)*pulse_width  + N - ( art_len_pre + art_len_post)) 
                 end_ = start_ + pulse_width - int(art_len_post) 
+                if i == num_pulses -1:
+                    end_ = end_ + 4000
                 sub_sub_signal = sub_signal[start_: end_] 
                 
                 y_fit_complete = np.zeros_like(sub_sub_signal)
 
                 W = np.array([np.convolve(sub_sub_signal,np.power(np.arange(-N, N+1), i)[::-1], 'valid') for i in range(max_poly+1)])
                 a = np.linalg.inv(S)@W
-#                 print(a.shape)
                 y_fit_complete[N:-N] = a[0]
                 
                 y_fit_complete[:N] = (a[:,0].T@np.array([np.power(np.arange(-N, N+1), i) for i in range(max_poly+1)]))[:N]
@@ -751,7 +786,10 @@ def remove_artefacts_mod(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_ti
                 y_fit_complete[-N-1:] = (a[:,-1].T@np.array([np.power(np.arange(-N, N+1), i) for i in range(max_poly+1)]))[N:]
 
                 sub_signal[start_: end_] = sub_sub_signal - y_fit_complete
-            
+        
+        
+#         if samp_current[i] > 0 :
+
         ## Artefact Removal Linear Interpolation ##
         sub_signal = signal[s-pre_: s+post_]
         x = np.setdiff1d(np.arange(-pre_, post_), (first_peak-art_len_pre) + np.concatenate([np.arange(i*pulse_width, i*pulse_width+art_len_post) for i in range(num_pulses)]))
@@ -760,7 +798,7 @@ def remove_artefacts_mod(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_ti
         sig_interp = interpolator_signal(np.arange(-pre_,post_))
 
         signal[s-pre_: s+post_] = sig_interp
-        
+
         
     return signal
 

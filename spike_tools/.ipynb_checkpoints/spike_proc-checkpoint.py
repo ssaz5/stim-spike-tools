@@ -77,7 +77,7 @@ if not timebin:
 output_dir = args.output_dir
 if not output_dir:
     output_dir = config['Paths']['proc_dir']
-    
+    print(config['Paths']['proc_dir'])
 dates = args.dates
 if not dates:
     dates = config['Experiment Information']['date']

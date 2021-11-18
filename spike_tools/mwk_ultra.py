@@ -32,7 +32,7 @@ parser.add_argument('photodiode_file', type=str,
 parser.add_argument('samp_on_file', type=str,
     help='sample on file Name: To be changed soon', nargs='?',default='')
 parser.add_argument('--remove_artefacts', type=int, nargs='?',default=0)
-parser.add_argument('--session_num', type=int, nargs='?',default=0)
+parser.add_argument('--session_num', type=int,default=0)
 parser.add_argument('--date', type=str)
 args = parser.parse_args()
 date = args.date

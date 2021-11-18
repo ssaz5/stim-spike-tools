@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=spk_proc
 #SBATCH --array=0-191
-#SBATCH --time=30:00
+#SBATCH --time=1:00:00
 #SBATCH --ntasks=1
 #SBATCH -c4
 #SBATCH --output="/om/user/ssazaidi/spike_proc/art_delay-%A_%a.out"

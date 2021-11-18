@@ -149,7 +149,7 @@ def main():
     
     
     pre_ = sum_window
-    post_ = 2*sum_window
+    post_ = (50*samplingFrequency)//1000 + 2*sum_window
     length_ = pre_+post_
     half_ = length_/(2*samplingFrequency)
     

@@ -690,9 +690,9 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
         assert type(art_time_usec) == np.ndarray
         
     if type(samp_current) == list:
-        samp_current = np.array(art_time_usec)
+        samp_current = np.array(samp_current)
     elif type(samp_current) == int:
-        samp_current = np.ones_like(samp_on)*art_time_usec
+        samp_current = np.ones_like(samp_on)*samp_current
     else:
         assert type(art_time_usec) == np.ndarray
         
@@ -712,8 +712,6 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
     art_len_post = np.ceil(fs*art_time_sec).astype(int)    
         
     for i, s in enumerate(samp_on):
-        if i == 39:
-            print(samp_current[i])
         pre_ = 0
         post_ = int(pulse_width*num_pulses)+200
         
@@ -729,15 +727,21 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
             while not peaks.size:
                 peaks = find_peaks(np.abs(sub_signal[:100]), vthres)[0]
                 vthres = vthres*0.9
+                if vthres < 50:
+                    print("Error on Artefact number: " , i, 'peaks', peaks, vthres)
+                    peaks=[40]
+                    break 
 
-
+#             if vthres < 50:
+# #                 print("Error on Artefact number: " , i, 'peaks', peaks, vthres)
+#                 break
             try:
                 first_peak = np.min(peaks)
             except:
-                print("Error on Artefact number: " , i, 'peaks', peaks, v_thres)
+                print("Error on Artefact number: " , i, 'peaks', peaks, vthres)
                 return
         else:
-            first_peak = 0
+            first_peak = 40
         ## Salpa Application
         if apply_salpa:
             
@@ -765,13 +769,13 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
 
             ### Post Stim signal ###
             
-            sub_signal = signal[s + center: s+2000]
+            sub_signal = signal[s + center: s+5000]
             
             for i in range(num_pulses):
                 start_ = i*pulse_width
                 end_ = start_ + pulse_width - int(art_len_post) 
                 if i == num_pulses -1:
-                    end_ = end_ + 4000
+                    end_ = end_ + 6000
                 sub_sub_signal = sub_signal[start_: end_] 
                 
                 y_fit_complete = np.zeros_like(sub_sub_signal)

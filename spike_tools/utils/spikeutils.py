@@ -742,6 +742,8 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
                 return
         else:
             first_peak = 40
+        
+        print(first_peak)
         ## Salpa Application
         if apply_salpa:
             

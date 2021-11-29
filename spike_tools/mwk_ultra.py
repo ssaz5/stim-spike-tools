@@ -34,10 +34,16 @@ parser.add_argument('samp_on_file', type=str,
 parser.add_argument('--remove_artefacts', type=int, nargs='?',default=0)
 parser.add_argument('--session_num', type=int,default=0)
 parser.add_argument('--date', type=str)
+parser.add_argument('--project_name', type=str)
 args = parser.parse_args()
+
 date = args.date
 if not date:
     date = config['Experiment Information']['date']
+
+project_name = args.project_name
+if project_name:
+    config['Experiment Information']['name'] = project_name
 
 
 SAMPLING_FREQUENCY_HZ = 20000  # Intan recording controller sampling frequency (to convert time units to ms)
@@ -154,7 +160,7 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
     if 'stimulation' in config['Experiment Information']['name']:
         names = names+['stim_key', 'stim_id',  'stim_current',]
     
-    data_file_name = os.path.join(rawDataDir,date, 'all_data.pkl')
+    data_file_name = os.path.join(rawDataDir,date, 'all_data_'+str(args.session_num)+'.pkl')
     
     if os.path.exists(data_file_name):
         data = joblib.load(data_file_name)
@@ -395,12 +401,14 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
     # Save output
     ###########################################################################
     stimulus_presented = stimulus_presented_df.data.values[good_ones].tolist()
-    samp_on_id = output['stim_id']
-    samp_on_current = output['stim_current']
-    temp = np.unique(list(zip(stimulus_presented,samp_on_id,samp_on_current)), axis=0)
-    stim_num_key = dict(zip([tuple( i )for i in temp], np.arange(1,len(temp)+1)))
-    new_stim_presented = [stim_num_key[tuple(i)] for i in np.array(list(zip(stimulus_presented,samp_on_id,samp_on_current)))]
-    output['stimulus_presented'] = new_stim_presented
+    if artefact_diode_flag:
+        samp_on_id = output['stim_id']
+        samp_on_current = output['stim_current']
+        temp = np.unique(list(zip(stimulus_presented,samp_on_id,samp_on_current)), axis=0)
+        stim_num_key = dict(zip([tuple( i )for i in temp], np.arange(1,len(temp)+1)))
+        stimulus_presented = [stim_num_key[tuple(i)] for i in np.array(list(zip(stimulus_presented,samp_on_id,samp_on_current)))]
+    output['stimulus_presented'] = stimulus_presented
+
     output['fixation_correct'] = correct_fixation_df.data.values[good_ones].tolist()
     output['stimulus_order_in_trial'] = stimulus_presented_df.stimulus_order_in_trial.values[good_ones].tolist()
 #     output['eye_h_degrees'] = eye_h

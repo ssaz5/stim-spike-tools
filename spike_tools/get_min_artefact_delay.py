@@ -119,6 +119,7 @@ parser.add_argument('-p', '--prefix', type=str, default='')
 parser.add_argument('-pp',  '--pulse_period', type=int, default=4000)
 parser.add_argument('-np',  '--num_pulses', type=int, default=10)
 parser.add_argument('-d', '--date', type=str, default='')
+parser.add_argument('--session_num', type=int,default=0)
 
 
 args = parser.parse_args()
@@ -144,11 +145,12 @@ def main():
 
     samplingFrequency = 20000
     pulse_period_ms = int(args.pulse_period/1000) # milliseconds
+    pulse_width = (pulse_period_ms*samplingFrequency)//1000
     num_pulses = args.num_pulses
     sum_window = int((pulse_period_ms* num_pulses * samplingFrequency)/1000)
     
     
-    pre_ = sum_window
+    pre_ = sum_window 
     post_ = (50*samplingFrequency)//1000 + 2*sum_window
     length_ = pre_+post_
     half_ = length_/(2*samplingFrequency)
@@ -158,9 +160,13 @@ def main():
     art_width_usec = 340
     art_width = np.ceil(art_width_usec*samplingFrequency/1e6).astype(int)
     
-    pulse_train = np.zeros([sum_window,])
+    pulse_train = np.zeros([sum_window,]) 
     pulse_train[np.concatenate([i + np.arange(art_width) for i in np.arange(0,sum_window,int(sum_window/num_pulses))+1])] = 1
     pulse_train = pulse_train[::-1]
+    
+    
+    flow = 300
+    fhigh = 5000
     
 
     ################ SAMP_ON DIGITAL LINE 2 #####################################
@@ -183,7 +189,7 @@ def main():
 
         
     ############### LOAD MWORKS DATA ################################    
-    data_file_name = os.path.join(rawDataPath, 'intanraw',date, 'all_data.pkl')
+    data_file_name = os.path.join(rawDataPath, 'intanraw',date, 'all_data_'+str(args.session_num)+'.pkl')
     print(data_file_name)
     if os.path.exists(data_file_name):
         mworks_data = joblib.load(data_file_name)
@@ -278,8 +284,8 @@ def main():
 
         artefact_delay_filename = rawDataPath+"intanraw/"+prefix+date+'/artefact_delays_'+date+'_'+channel_name+'.pkl'
         
-        if os.path.exists(artefact_delay_filename):
-            return
+#         if os.path.exists(artefact_delay_filename):
+#             return
 
         channel_name = channel_name.upper()
 
@@ -312,32 +318,70 @@ def main():
         for idx, s in enumerate(samp_on):
             i = idx
             i +=shift
-            vthres= v_thres
-            sub_signal = v[samp_on[i]-pre_: samp_on[i]+post_]
-            band_pass_sub_signal = apply_bandpass(sub_signal, samplingFrequency, 300,6000)
-            sub_signals[idx,:] = sub_signal
-            peaks= np.array([])
-            while peaks.size < 10 :
-                peaks = find_peaks(np.abs(band_pass_sub_signal), vthres)[0]
-                vthres = vthres*0.9
-            print(i, peaks, type(peaks), vthres)
-            temp = np.zeros_like(sub_signal)
-
-
+            
             try:
                 if samp_on_current[i] > 0:
+                    vthres= v_thres
+                    sub_signal = v[samp_on[i]-pre_: samp_on[i]+post_]
+                    band_pass_sub_signal = apply_bandpass(sub_signal, samplingFrequency, flow,fhigh)
+                    if samp_on_current[i] < 8:
+                        band_pass_sub_signal = np.clip(band_pass_sub_signal, -300, 300)
+
+
+                    sub_signals[idx,:] = sub_signal
+                    peaks= np.array([])
+                    while peaks.size < 10 :
+                        peaks = find_peaks(np.abs(band_pass_sub_signal), vthres)[0]
+                        vthres = vthres*0.9
+                        if vthres < 100:
+                            break
+                    print('check point 1: ', i, peaks, vthres)
+                
+
+
+            
         #             artefact_time = np.min(peaks)
                     ########### SULE EDITS -- GET BEGINNING OF PULSE TRAIN #########################
                     if vthres < 100:
                         print('This did not work!')
                         raise Exception("Let's not!")
-
-                    temp[peaks] = 1
+                    
+                   
 
                     sig_av = np.convolve(np.square (band_pass_sub_signal), pulse_train, 'valid')
-                    art_start = np.argmax(sig_av) - art_width
+                    art_start = np.argmax(sig_av) #- art_width
 
                      ########### SULE EDITS -- GET BEGINNING OF PULSE TRAIN #########################
+                    
+                    ############### ADD CODE FOR PULSE CORRECTION #############################
+                    pre_correction = pulse_width // 2
+                    post_correction = int(pulse_width*num_pulses)+200
+                    
+
+                    vthres = v_thres
+                    
+                    artefact_time = art_start - pre_ + samp_on[i]
+
+                    sub_signal = apply_bandpass(v[artefact_time-pre_correction: artefact_time+post_correction], 
+                                                        samplingFrequency, flow,fhigh)
+
+                    print('convolution_done\n\n')    
+                    
+                    peaks= np.array([])
+                    print(vthres)
+                    while not peaks.size:
+                        if vthres < 100:
+                            print("Error on Artefact number: " , i, 'peaks', peaks, vthres)
+                            break 
+                        peaks = find_peaks(np.abs(sub_signal[:100]), vthres)[0]
+                        vthres = vthres*0.9
+                        
+                    first_peak = np.min(peaks)
+                    art_start += first_peak - pre_correction - 2
+                    print('correction term is: ', first_peak - pre_correction -2)
+                    print('art_start is: ', art_start)
+                    
+                    ###########################################################################
                 else:
                     art_start = 0
                         
@@ -346,7 +390,7 @@ def main():
                 sub_samp_on.append(s)
                 sub_samp_number.append(idx)
             except:
-        #         print('Missing stim on: ', s)
+                print('Missing stim on: ', idx, s)
                 failed_samp_on.append(s)
                 failed_stim_number.append(idx)
                 pass
@@ -371,9 +415,10 @@ def main():
 
         artefact_info= {'artefact_delay':artefact_delay}
 
+        print('data is being saved...\n\n')
 
         joblib.dump(artefact_info, artefact_delay_filename)
-        
+        print('data is saved')
         return
 
 if __name__ == "__main__":

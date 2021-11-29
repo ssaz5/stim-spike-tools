@@ -128,7 +128,7 @@ artefact_times = np.nanmedian(artefact_times, axis=0).astype(int)
 artefact_times = artefact_times[good_ones]
 
 
-if not os.path.exists(os.path.join(rectFilePath, rectFilename)):
+if 1: #not os.path.exists(os.path.join(rectFilePath, rectFilename)):
     print('Calculating v1 and v2')
 
     v = read_amplifier(os.path.join(rawDataPath, d, files[channel_num]))  # In microvolts

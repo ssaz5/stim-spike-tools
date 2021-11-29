@@ -33,6 +33,9 @@ parser.add_argument('-o', '--output_dir', type=str)
 parser.add_argument('-ds', '--dates', type=str, nargs='+')
 parser.add_argument('-ra',  '--remove_stim_artefacts', type=int, default=0)
 parser.add_argument('-sa',  '--apply_salpa', type=int, default=0)
+parser.add_argument('--project_name', type=str)
+
+
 
 
 args = parser.parse_args()
@@ -60,6 +63,8 @@ if not date:
 monkey = args.monkey
 if not monkey:
     monkey = config['Experiment Information']['monkey']
+    
+    
 n_channels = args.nchannels
 if not n_channels:
     n_channels = config['Experiment Information'].getint('n_channels')
@@ -82,8 +87,13 @@ dates = args.dates
 if not dates:
     dates = config['Experiment Information']['date']
 
-raw_dir = config['Paths']['raw_dir']
-proc_dir = config['Paths']['proc_dir']
+project_name = args.project_name
+if project_name:
+    raw_dir = config['Paths']['home_dir']+'/projects/'+project_name+'/monkeys/'+config['Experiment Information']['monkey']+'/intanraw'
+    proc_dir = config['Paths']['home_dir']+'/projects/'+project_name+'/monkeys/'+config['Experiment Information']['monkey']+'/intanproc'
+else:
+    raw_dir = config['Paths']['raw_dir']
+    proc_dir = config['Paths']['proc_dir']
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
@@ -91,7 +101,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 if args.experiment_name == 'spike_times':
     get_spike_times(args.num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low, f_high, noise_threshold, remove_stim_artefacts = args.remove_stim_artefacts, num_pulses= args.num_pulses, pulse_period= args.pulse_period, apply_salpa=args.apply_salpa)
 elif args.experiment_name == 'psth': 
-    get_psth(args.num, date, proc_dir, start_time, stop_time, timebin, args.num_images)
+    get_psth(args.num, date, proc_dir, start_time, stop_time, timebin, args.num_images, args.remove_stim_artefacts)
 elif args.experiment_name == 'combine_channels':
     combine_channels(proc_dir, n_channels, args.suffix)
 elif args.experiment_name == 'combine_sessions':

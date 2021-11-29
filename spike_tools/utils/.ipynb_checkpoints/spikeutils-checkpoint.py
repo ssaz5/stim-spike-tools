@@ -60,16 +60,19 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
     with os.scandir(raw_dir) as it:
         dirs = [entry.name for entry in it if (entry.is_dir() and entry.name.find(date) != -1 and entry.name != date)]
     dirs.sort()
+    print(dirs)
     logging.debug(dirs)
-
+    dataPath = '/'.join(raw_dir.split('/')[:-1])
     for d in dirs:
         # Get all raw neural data files
         with os.scandir(os.path.join(raw_dir, d)) as it:
             files = [entry.name for entry in it if (entry.is_file() and entry.name.find('amp') != -1)]
         files.sort()  # The files are randomly loaded, so sort them
         print(n_channels, len(files))
-        assert len(files) == n_channels  # Check if number of files matches number of channels
-
+        try:
+            assert len(files) == n_channels  # Check if number of files matches number of channels
+        except:
+            continue
         # Create spikeTime directory if it does not already exist
         if not os.path.isdir(os.path.join(proc_dir, d, 'spikeTime')):
             os.makedirs(os.path.join(proc_dir, d, 'spikeTime'), exist_ok=True)
@@ -89,8 +92,14 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
                 artefact_times = np.nanmedian(artefact_times, axis=0).astype(int)
                 artefact_times = artefact_times[good_ones]
                 
-                v = remove_artefacts_mod(v, artefact_times, f_sampling, f_low, f_high, art_time_usec=1500, v_thres=400, num_pulses=num_pulses, pulse_width_usec=pulse_period, apply_salpa=apply_salpa)
-            print('Artefacts successfully removed')
+                mworksproc_name = os.path.join(dataPath, 'mworksproc', [i for i in os.listdir(dataPath+'/mworksproc') if date in i][0] )   
+                data_info = pd.read_csv(mworksproc_name)
+                samp_on_id = data_info.stim_id.values
+                samp_on_current = data_info.stim_current.values
+                
+                
+                v = remove_artefacts_mod(v, artefact_times, f_sampling, f_low, f_high, art_time_usec=900, v_thres=400, num_pulses=num_pulses, pulse_width_usec=pulse_period, apply_salpa=apply_salpa, samp_current = samp_on_current)
+                print('Artefacts successfully removed')
             
 
             nrSegments = 10
@@ -140,7 +149,7 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
                         oned_as='column')
 
 
-def get_psth(num, date, proc_dir, start_time, stop_time, timebin, total_num_images=None):
+def get_psth(num, date, proc_dir, start_time, stop_time, timebin, total_num_images=None, stimulation_experiment=False):
     """
     Combines spike event times and behavioral data to make a PSTH.
 
@@ -166,6 +175,7 @@ def get_psth(num, date, proc_dir, start_time, stop_time, timebin, total_num_imag
     -------
 
     """
+    print('channel # ', num)
     # Get names of all directories with the specified 'date'.
     with os.scandir(proc_dir) as it:
         dirs = [entry.name for entry in it if (entry.is_dir() and entry.name.find(date) != -1)]
@@ -249,20 +259,35 @@ def get_psth(num, date, proc_dir, start_time, stop_time, timebin, total_num_imag
             if total_num_images:
                 image_numbers = np.arange(total_num_images)
             else:
+                print('\n\nDo we even get here?!\n\n')
                 image_numbers = np.unique(mwk_data['stimulus_presented'])  # TODO: if not all images are shown (for eg, exp cut short), you'll have to manually type in total # images
             psth = np.full((len(image_numbers), max_number_of_reps, len(timebase)), np.nan)  # Re-ordered PSTH
-
+            if stimulation_experiment:
+                stim_currents = []
+                stim_ids = []
             for i, image_num in enumerate(image_numbers):
-                if image_num not in mwk_data.stimulus_presented:
-                    continue
+#                 if image_num not in mwk_data.stimulus_presented:
+#                     print('something wrong here mate!', image_num, np.unique(mwk_data.stimulus_presented))
+#                     exit()
+#                     continue
                 index_in_table = np.where(mwk_data.stimulus_presented == image_num)[0]
                 selected_cells = psth_matrix[index_in_table, :]
                 # Use i instead of image_num for indexing psth as image_num can be 0-25, or 1-26(!)
                 psth[i, :selected_cells.shape[0], :] = selected_cells
+                
+                if stimulation_experiment:
+#                     print(index_in_table.shape, mwk_data.stim_current.values[index_in_table])
+                    stim_currents+=[list(mwk_data.stim_current.values[index_in_table])]
+                    stim_ids+=[list(mwk_data.stim_id.values[index_in_table])]
+                
+                
 
             logging.info(psth.shape)
             # Save psth data
-            meta = {'start_time_ms': start_time, 'stop_time_ms': stop_time, 'tb_ms': timebin}
+            if stimulation_experiment:
+                meta = {'start_time_ms': start_time, 'stop_time_ms': stop_time, 'tb_ms': timebin , 'stim_currents':stim_currents, 'stim_ids':stim_ids}
+            else:
+                meta = {'start_time_ms': start_time, 'stop_time_ms': stop_time, 'tb_ms': timebin}
             psth = {'psth': psth, 'meta': meta}
 
             sio.savemat(os.path.join(proc_dir, d, 'psth') + '/' + files[num] + '_psth.mat', psth)
@@ -675,13 +700,16 @@ def remove_artefacts(signal, samp_on, fs=20000, flow=300, fhigh=6000, art_time_u
         
     return signal
 
-def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_time_usec=1200, v_thres = 100, num_pulses = 10, pulse_width_usec = 4000, apply_salpa = False, samp_current=1):
+def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_time_usec=1200, v_thres = 100, num_pulses = 10, pulse_width_usec = 4000, apply_salpa = False, samp_current=1, pre_pre_ =3000):
     """
     Remove stimulation artefacts using absolute threshold (v_thres)
     Function removes signal of micro-second time window art_time_usec around each artefact and replaces it with linear interpolation of 
     the signal.
     """
     signal = np.copy(signal)
+    
+    signal = bandpass_filter(signal, fs, flow,fhigh)
+    
     if type(art_time_usec) == list:
         art_time_usec = np.array(art_time_usec)
     elif type(art_time_usec) == int:
@@ -720,7 +748,8 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
         s = s-40
 
         
-        sub_signal = bandpass_filter(signal[s-pre_: s+post_], fs, flow,fhigh)
+#         sub_signal = bandpass_filter(signal[s-pre_: s+post_], fs, flow,fhigh)
+        sub_signal = signal[s-pre_: s+post_]
 
         peaks= np.array([])
         if samp_current[i]:
@@ -742,13 +771,15 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
                 return
         else:
             first_peak = 40
+        first_peak = 40
+        print(first_peak)
         ## Salpa Application
         if apply_salpa:
             
             center = int((first_peak - art_len_pre) + art_len_post )
             
             ### Pre stim signal ###
-            pre_pre_ = 3000
+#             pre_pre_ = 3000
             start_ = s-pre_pre_
             end_ = s+center - art_len_post
             sub_signal = signal[ start_: end_]

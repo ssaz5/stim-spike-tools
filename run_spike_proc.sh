@@ -4,10 +4,10 @@
 #SBATCH --array=0-191
 #SBATCH --time=10:00:00
 #SBATCH --ntasks=1
-#SBATCH -c2
+#SBATCH -c4
 #SBATCH --output="/om/user/ssazaidi/spike_proc/slurm-%A_%a.out"
-#SBATCH --mem=1000
-#SBATCH --exclude=node052,node098,node080
+#SBATCH --mem=10000
+#SBATCH --exclude=node052,node098,node080,node021,node006
 
 hostname
 

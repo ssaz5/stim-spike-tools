@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH -c8
 #SBATCH --output="/om/user/ssazaidi/spike_proc/save_rect-%A_%a.out"
-#SBATCH --mem=10000
+#SBATCH --mem=14000
 #SBATCH -pdicarlo
 #SBATCH --exclude=node052,node098,node080,node074,node037
 

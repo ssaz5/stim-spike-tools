@@ -17,7 +17,7 @@ from scipy import interpolate
 
 import joblib
 
-def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low, f_high, noise_threshold, save_waveform=False, remove_stim_artefacts = False, num_pulses = 10, pulse_period=4000, apply_salpa=False):
+def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low, f_high, noise_threshold, save_waveform=False, remove_stim_artefacts = False, num_pulses = 10, pulse_period=4000, apply_salpa=False, spike_mode = 'thres'):
     """
     Reads data from a single Intan amplifier channel file and extracts spike event times (ms).
 
@@ -76,7 +76,7 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
         # Create spikeTime directory if it does not already exist
         if not os.path.isdir(os.path.join(proc_dir, d, 'spikeTime')):
             os.makedirs(os.path.join(proc_dir, d, 'spikeTime'), exist_ok=True)
-
+#         if 1 or not os.path.isfile(os.path.join(proc_dir, d, 'spikeTime') + '/' + files[num][:-4] + '_spk.mat'):
         if not os.path.isfile(os.path.join(proc_dir, d, 'spikeTime') + '/' + files[num][:-4] + '_spk.mat'):
             # Get amplifier channel data and apply 60 Hz notch filter
             print('inside')
@@ -124,13 +124,24 @@ def get_spike_times(num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low,
                 # deviation value
                 noiseLevel = -noise_threshold * np.median(np.abs(v2)) / 0.6745
 #                 noiseLevel = -noise_threshold 
-                outside = np.array(v2) < noiseLevel  # Spits a logical array
-                outside = outside.astype(int)  # Convert logical array to int array for diff to work
+                
+                
+                if spike_mode == 'thres':
+                    # Sachi spike detection
+                    outside = np.logical_and(np.array(v2) < noiseLevel, np.array(v2) > -100)  # Spits a logical array
+                    outside = outside.astype(int)  # Convert logical array to int array for diff to work
 
-                cross = np.concatenate(([outside[0]], np.diff(outside, n=1) > 0))
+                    cross = np.concatenate(([outside[0]], np.diff(outside, n=1) > 0))
 
-                idxs = np.nonzero(cross)[0]
-                spike_times_ms.extend(timeIdxs[idxs])
+                    idxs = np.nonzero(cross)[0]
+                    spike_times_ms.extend(timeIdxs[idxs])
+                elif spike_mode == 'shape':
+                    ## Sule Spike Detection
+                    peaks = find_peaks(-v2, [-noiseLevel, 100], width=[8], rel_height=1, threshold=[0, 11], distance=10, prominence=[-3*noiseLevel/4])
+                    spike_times_ms.extend(timeIdxs[peaks[0]])
+                else:
+                    print("Incorrect Spike Detection Mode")
+                    exit()
 
                 # Get waveforms (-1ms to 2ms)
                 if save_waveform:
@@ -188,6 +199,7 @@ def get_psth(num, date, proc_dir, start_time, stop_time, timebin, total_num_imag
     mwk_files.sort()
 
     logging.debug(f'{mwk_files}, {dirs}')
+    print(len(mwk_files), len(dirs))
     assert len(mwk_files) == len(dirs)
     
     timebase = np.arange(start_time, stop_time, timebin)
@@ -232,7 +244,7 @@ def get_psth(num, date, proc_dir, start_time, stop_time, timebin, total_num_imag
         if not os.path.isfile(os.path.join(proc_dir, d, 'spikeTime') + '/' + files[num] + '_spk.mat'):
             exit()
 
-        if not os.path.isfile(os.path.join(proc_dir, d, 'psth') + '/' + files[num] + '_psth.mat'):
+        if 1 or not os.path.isfile(os.path.join(proc_dir, d, 'psth') + '/' + files[num] + '_psth.mat'):
             print('Starting to estimate PSTH')
 
             # Load spikeTime file for current channel
@@ -322,9 +334,9 @@ def combine_channels(proc_dir, num_channels=288, suffix = ''):
             ch_files = [i for i in os.listdir(psth_dir) if 'psth.mat' in i]
             ch_files.sort()
             logging.debug(f'{len(ch_files)} files in {d}')
-            if not len(ch_files) == num_channels:  # Skip if not all channel files present
-                print(ch_files)
-                continue
+#             if not len(ch_files) == num_channels:  # Skip if not all channel files present
+#                 print(ch_files)
+#                 continue
             psth = [sio.loadmat(os.path.join(psth_dir, f), squeeze_me=True, variable_names='psth')['psth'] for f in ch_files]
             print([i.shape for i in psth])
             psth = np.asarray(psth)  # channels x stimuli x reps x timebins
@@ -771,8 +783,8 @@ def remove_artefacts_mod(signal, samp_on,fs=20000, flow=300, fhigh=6000, art_tim
                 return
         else:
             first_peak = 40
-        first_peak = 40
-        print(first_peak)
+        # first_peak = 40
+        # print(first_peak)
         ## Salpa Application
         if apply_salpa:
             

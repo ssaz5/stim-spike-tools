@@ -29,11 +29,13 @@ parser.add_argument('-no',  '--normalize', type=int, default=0)
 parser.add_argument('-np',  '--num_pulses', type=int, default=10)
 parser.add_argument('-pp',  '--pulse_period', type=int, default=4000)
 parser.add_argument('-e', '--experiment_name', type=str, default='spike_times')
+parser.add_argument('--spike_mode', type=str, default='thres')
 parser.add_argument('-o', '--output_dir', type=str)
 parser.add_argument('-ds', '--dates', type=str, nargs='+')
 parser.add_argument('-ra',  '--remove_stim_artefacts', type=int, default=0)
 parser.add_argument('-sa',  '--apply_salpa', type=int, default=0)
 parser.add_argument('--project_name', type=str)
+parser.add_argument('--save_waveform', type=int, default=0)
 
 
 
@@ -99,7 +101,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 if args.experiment_name == 'spike_times':
-    get_spike_times(args.num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low, f_high, noise_threshold, remove_stim_artefacts = args.remove_stim_artefacts, num_pulses= args.num_pulses, pulse_period= args.pulse_period, apply_salpa=args.apply_salpa)
+    get_spike_times(args.num, date, raw_dir, proc_dir, f_sampling, n_channels, f_low, f_high, noise_threshold, save_waveform = args.save_waveform, remove_stim_artefacts = args.remove_stim_artefacts, num_pulses= args.num_pulses, pulse_period= args.pulse_period, apply_salpa=args.apply_salpa, spike_mode=args.spike_mode)
 elif args.experiment_name == 'psth': 
     get_psth(args.num, date, proc_dir, start_time, stop_time, timebin, args.num_images, args.remove_stim_artefacts)
 elif args.experiment_name == 'combine_channels':

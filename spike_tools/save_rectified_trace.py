@@ -35,6 +35,7 @@ parser.add_argument('-d', '--date', type=str, default='')
 parser.add_argument('-pp',  '--pulse_period', type=int, default=4000)
 parser.add_argument('-np',  '--num_pulses', type=int, default=10)
 parser.add_argument('-au', '--art_time_usec', type=int, default = 1200)
+parser.add_argument('--project_name', type=str)
 
 args = parser.parse_args()
 
@@ -42,6 +43,10 @@ args = parser.parse_args()
 date = args.date
 if not date:
     date = config['Experiment Information']['date'] 
+
+project_name = args.project_name
+if project_name:
+    config['Experiment Information']['name']  = project_name
 
 
 ### Create Channel List ###
@@ -128,7 +133,7 @@ artefact_times = np.nanmedian(artefact_times, axis=0).astype(int)
 artefact_times = artefact_times[good_ones]
 
 
-if 1: #not os.path.exists(os.path.join(rectFilePath, rectFilename)):
+if 1 or not os.path.exists(os.path.join(rectFilePath, rectFilename)):
     print('Calculating v1 and v2')
 
     v = read_amplifier(os.path.join(rawDataPath, d, files[channel_num]))  # In microvolts
@@ -176,7 +181,7 @@ if 1: #not os.path.exists(os.path.join(rectFilePath, rectFilename)):
 
     os.makedirs(rectFilePath, exist_ok = True)
 
-    joblib.dump(data_dict, os.path.join(rectFilePath, rectFilename), compress=3)
+    joblib.dump(data_dict, os.path.join(rectFilePath, rectFilename))
 else:
     print('Skipping v1 v2 calculation')
     v = read_amplifier(os.path.join(rawDataPath, d, files[channel_num]))  # In microvolts
@@ -203,6 +208,7 @@ for stim_id in unique_ids:
         post_ = 2000
         
         average_signal = np.zeros([1,pre_+post_])
+        all_signals = []
         count = 0
         color_ = 'm'
 
@@ -214,9 +220,10 @@ for stim_id in unique_ids:
             broadband_signal_bandpass_rectification = bandpass_filter(v2[artefact_times[art_num]-pre_:artefact_times[art_num]+post_], samplingFrequency, f_low, f_high)
 #             f_low = 0.1
             f_low = 200
-            broadband_signal_low_pass = lowpass_filter(broadband_signal_bandpass_rectification, samplingFrequency, f_low)
-#             broadband_signal_low_pass = moving_average(broadband_signal_bandpass_rectification, 100)
+            # broadband_signal_low_pass = lowpass_filter(broadband_signal_bandpass_rectification, samplingFrequency, f_low)
+            broadband_signal_low_pass = moving_average(broadband_signal_bandpass_rectification, 100)
             average_signal += broadband_signal_low_pass
+            all_signals.append(broadband_signal_low_pass)
             count +=1
 
         average_signal = average_signal/count
@@ -229,7 +236,7 @@ for stim_id in unique_ids:
         plt.title('Current = '+str(stim_current))
         plt.xlabel('Time (ms)')
         plt.ylabel('Voltage (uV)')
-        plt.ylim([-5,55])
+        plt.ylim([-5,15])
 
 
     plt.suptitle('Stim_channel: '+stim_id.capitalize()+ '; Recording Channel: '+all_channels[channel_num].capitalize())
@@ -242,4 +249,4 @@ for stim_id in unique_ids:
     os.makedirs(plot_data_dir, exist_ok=True)
     plot_data_filename = 'trace_recording_site_'+all_channels[channel_num]+'.pkl'
     print(plot_data_filename)
-    joblib.dump(average_signals, os.path.join(plot_data_dir, plot_data_filename))
+    joblib.dump({'average_signals':average_signals, 'all_signals':all_signals}, os.path.join(plot_data_dir, plot_data_filename))

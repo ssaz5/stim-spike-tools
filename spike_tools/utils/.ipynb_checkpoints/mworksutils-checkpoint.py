@@ -74,7 +74,7 @@ def get_trial_indices(events, df = False, delay_sec= 1):
     diff_times = np.diff(times)
     trials = []
     mini_trial = [0]
-
+    print( diff_times)
     for i, t in enumerate(diff_times):
         if t < delay_sec*1e6:
             mini_trial.append(i+1)

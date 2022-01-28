@@ -29,15 +29,19 @@ parser.add_argument('mworks_file', metavar='N', nargs='?', type=str,
     help='Mworks file Name: To be changed soon')
 parser.add_argument('--session_num', type=int, nargs='?',default=0)
 parser.add_argument('--date', type=str)
-
+parser.add_argument('--project_name', type=str)
 
 args = parser.parse_args()
+
+
 date = args.date
 if not date:
     date = config['Experiment Information']['date']
 
 
-
+project_name = args.project_name
+if project_name:
+    config['Experiment Information']['name'] = project_name
 
 
 def equal_for_all_trials(events):
@@ -108,7 +112,7 @@ def dump_events(filename):
         rawDataDir = '/'.join(filename.split('/')[:-2]+['intanraw'])
         mworksprocDir = '/'.join(filename.split('/')[:-2] + ['mworksproc'])
     data_dir_name = os.path.join(rawDataDir,date)
-    data_file_name = os.path.join(data_dir_name, 'all_data.pkl')
+    data_file_name = os.path.join(data_dir_name, 'all_data_'+str(args.session_num)+'.pkl')
     names = ['trial_start_line',
              'stim_key',
              'stim_id',

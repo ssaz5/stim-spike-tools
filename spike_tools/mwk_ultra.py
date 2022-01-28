@@ -47,7 +47,7 @@ if project_name:
 
 
 SAMPLING_FREQUENCY_HZ = 20000  # Intan recording controller sampling frequency (to convert time units to ms)
-THRESHOLD = 0.9  # Threshold for detecting the first rising edge in the oscillating photodiode signal
+THRESHOLD = 0.88  # Threshold for detecting the first rising edge in the oscillating photodiode signal
 
 
 
@@ -281,6 +281,7 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
         # Detect rises in the oscillating photodiode signal
         peaks, _ = find_peaks(v, height=0)  # Find all peaks
         peaks = np.asarray([p for p in peaks if v[p] > THRESHOLD])  # Apply threshold
+        
         photodiode_on = np.asarray([min(peaks[(peaks >= s) & (peaks < (s + 100000))]) for s in samp_on])
 
         assert len(photodiode_on) == len(stimulus_presented_df)
@@ -299,9 +300,13 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
     correct_fixation_df['time'] = corrected_time
 
     # Print any times differences between digital signal and photodiode that are atrociously huge (>40ms)
+    num_bad_samples = 0
     for i, x in enumerate(photodiode_on - samp_on):
         if x / 1000. > 40 or x/1000 < -40:
             print(f'Warning: Sample {i} has delay of {x / 1000.} ms')
+            num_bad_samples +=1
+    if args.remove_artefacts:
+        print(num_bad_samples, len(artefact_times) -  len(good_ones))
 
     ###########################################################################
     # Get eye data
@@ -358,7 +363,7 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
         current_times = np.array([row.time for i, row in current_events.iterrows()])
         id_times = np.array([row.time for i, row in id_events.iterrows()])
 
-        current_trials = get_trial_indices(current_events, df=True, delay_sec=0.5)
+        current_trials = get_trial_indices(current_events, df=True, delay_sec=1)
         id_trials = get_trial_indices(id_events, df=True, delay_sec = 0.5)
         
 
@@ -401,12 +406,16 @@ def dump_events(filename, photodiode_file, sample_on_file, artefact_diode_flag =
     # Save output
     ###########################################################################
     stimulus_presented = stimulus_presented_df.data.values[good_ones].tolist()
-    if artefact_diode_flag:
-        samp_on_id = output['stim_id']
-        samp_on_current = output['stim_current']
-        temp = np.unique(list(zip(stimulus_presented,samp_on_id,samp_on_current)), axis=0)
-        stim_num_key = dict(zip([tuple( i )for i in temp], np.arange(1,len(temp)+1)))
-        stimulus_presented = [stim_num_key[tuple(i)] for i in np.array(list(zip(stimulus_presented,samp_on_id,samp_on_current)))]
+#     if artefact_diode_flag:
+#         samp_on_id = output['stim_id']
+#         samp_on_current = output['stim_current']
+# #         temp = np.unique(list(zip(stimulus_presented,samp_on_id,samp_on_current)), axis=0)
+# #         stim_num_key = dict(zip([tuple( i )for i in temp], np.arange(1,len(temp)+1)))
+# #         stimulus_presented = [stim_num_key[tuple(i)] for i in np.array(list(zip(stimulus_presented,samp_on_id,samp_on_current)))]
+        
+#         temp = np.unique(list(zip(samp_on_id,samp_on_current)), axis=0)
+#         stim_num_key = dict(zip([tuple( i )for i in temp], np.arange(1,len(temp)+1)))
+#         stimulus_presented = [stim_num_key[tuple(i)] for i in np.array(list(zip(samp_on_id,samp_on_current)))]
     output['stimulus_presented'] = stimulus_presented
 
     output['fixation_correct'] = correct_fixation_df.data.values[good_ones].tolist()

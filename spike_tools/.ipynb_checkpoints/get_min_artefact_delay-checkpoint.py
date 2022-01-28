@@ -120,11 +120,16 @@ parser.add_argument('-pp',  '--pulse_period', type=int, default=4000)
 parser.add_argument('-np',  '--num_pulses', type=int, default=10)
 parser.add_argument('-d', '--date', type=str, default='')
 parser.add_argument('--session_num', type=int,default=0)
+parser.add_argument('--project_name', type=str)
 
 
 args = parser.parse_args()
 
 def main():
+    project_name = args.project_name
+    if project_name:
+        config['Experiment Information']['name'] = project_name
+
     rawDataPath = "/braintree/data2/active/users/ssazaidi/projects/"+config['Experiment Information']['name']+"/monkeys/oleo/"
     
     if args.date == '':
@@ -206,7 +211,7 @@ def main():
     current_times = np.array([row.time for i, row in current_events.iterrows()])
     id_times = np.array([row.time for i, row in id_events.iterrows()])
 
-    current_trials = get_trial_indices(current_events, df=True, delay_sec=0.5)
+    current_trials = get_trial_indices(current_events, df=True, delay_sec=1)
     id_trials = get_trial_indices(id_events, df=True, delay_sec = 0.5)
 
 
@@ -284,8 +289,8 @@ def main():
 
         artefact_delay_filename = rawDataPath+"intanraw/"+prefix+date+'/artefact_delays_'+date+'_'+channel_name+'.pkl'
         
-#         if os.path.exists(artefact_delay_filename):
-#             return
+        if os.path.exists(artefact_delay_filename):
+            return
 
         channel_name = channel_name.upper()
 

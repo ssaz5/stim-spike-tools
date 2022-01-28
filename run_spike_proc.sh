@@ -6,8 +6,8 @@
 #SBATCH --ntasks=1
 #SBATCH -c4
 #SBATCH --output="/om/user/ssazaidi/spike_proc/slurm-%A_%a.out"
-#SBATCH --mem=10000
-#SBATCH --exclude=node052,node098,node080,node021,node006
+#SBATCH --mem=14000
+#SBATCH --exclude=node052,node098,node080,node021,node006,node042
 
 hostname
 

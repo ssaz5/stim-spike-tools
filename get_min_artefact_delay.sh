@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=spk_proc
-#SBATCH --array=0-191  
+#SBATCH --array=0-191
 #SBATCH --time=1:00:00
 #SBATCH --ntasks=1
 #SBATCH -c4
